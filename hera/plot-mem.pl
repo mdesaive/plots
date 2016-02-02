@@ -19,7 +19,7 @@ set multiplot layout 5, 1
 
 set title sprintf("%s - Memory Used on %s.",host, dom)
 set xdata time
-set yrange [0:200000000]
+# set yrange [0:200000000]
 set format y "%12.0f"
 set key right top
 set lmargin 12
@@ -29,7 +29,7 @@ plot filename_memory using 1:3 with lines title 'kbmemused'
 
 set title sprintf("%s - Free Memory on %s.",host, dom)
 set xdata time
-set yrange [0:5000000]
+# set yrange [0:5000000]
 set format y "%12.0f"
 set key right top
 set lmargin 12
@@ -39,7 +39,7 @@ plot filename_memory using 1:2 with lines title 'kbmemfree'
 
 set title sprintf("%s - Swap Used on %s.",host, dom)
 set xdata time                                                                   
-set yrange[0:50000000]
+# set yrange[0:50000000]
 # 
 set key right top
 set timefmt "%H:%M:%S"                                                           
@@ -48,7 +48,7 @@ plot filename_swap using 1:3 with lines title 'kbswpused'
 
 set title sprintf("%s - Swap Free on %s.",host, dom)
 set xdata time                                                                   
-set yrange[0:300000000]
+# set yrange[0:300000000]
 # 
 set key right top
 set timefmt "%H:%M:%S"                                                           
@@ -57,7 +57,7 @@ plot filename_swap using 1:2 with lines title 'kbswpfree'
 
 set title sprintf("%s - Swap Paging on %s.",host, dom)
 set xdata time                                                                   
-set yrange[0:10000]
+# set yrange[0:10000]
 # 
 set key right top
 set timefmt "%H:%M:%S"                                                           
