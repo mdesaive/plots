@@ -1,5 +1,5 @@
 declare -a devs=("sda")
-declare -a days=("02")
+declare -a days=("02" "03" "04")
 # declare -a days=("06")
 declare -a hosts=("hera")
 declare -a cpus=("all" "0" "1")
