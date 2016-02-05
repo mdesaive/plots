@@ -15,6 +15,7 @@ Run this script by typing 'python hostutilization.py'.
 import argparse
 import datetime
 import errno
+import shlex
 import os
 import subprocess
 
@@ -75,16 +76,12 @@ class hostutil(object):
             my_doms = self.dom.split()
 
         for my_dom in my_doms:
-            print("/usr/bin/sar", "-n DEV", "-f " + self.dst_dir + "/" + self.host + "/" + self.sysstat_files + "/sa" + my_dom)
-            # str_sar_net = subprocess.check_output(["/usr/bin/sar", "-n DEV", "-f " + self.dst_dir + "/" + self.host + "/" + self.sysstat_files + "/sa" + my_dom])
-            str_sar_net = subprocess.check_output(["/usr/bin/sar", "-A", "-f " + self.dst_dir + "/" + self.host + "/" + self.sysstat_files + "/sa" + my_dom])
-            print("hier") 
-            print(str_sar_net)
+            str_cmd = "/usr/bin/sar -n DEV -f " + self.dst_dir + "/" + self.host + "/" + self.sysstat_files + "/sa" + my_dom
+            cmd = shlex.split(str_cmd)
+            str_sar_net = subprocess.check_output(cmd)
+            for myline in str_sar_net.splitlines():
+                print(myline.decode())
 
-        
-            
-       
- 
 
 def initialize():
     parser = argparse.ArgumentParser()
