@@ -15,8 +15,11 @@ Run this script by typing 'python hostutilization.py'.
 import argparse
 import datetime
 import errno
+import glob
 import shlex
 import os
+import pdb
+import re
 import subprocess
 
 from numpy import *
@@ -36,6 +39,9 @@ class hostutil(object):
         self.sysstat_snippet = "sa" 
         self.sysstat_files = "sysstat-files"
         self.csv_files = "results"
+        
+        self.nic_names = {}
+        self.doms_explicit = []
 
     def download_sysstat_files(self):
         if self.user is not None:
@@ -50,15 +56,15 @@ class hostutil(object):
                 raise
 
         if self.dom == "ALL":
-            serverstring = serverstring + "/*"
+            serverstring = serverstring + "/sa??"
             print("scp", serverstring, self.dst_dir + "/" + self.host + "/" + self.sysstat_files)
-            subprocess.call(["scp", serverstring, self.dst_dir + "/" + self.host + "/" + "/sysstat-files"])
+            subprocess.call(["scp", serverstring, self.dst_dir + "/" + self.host + "/" + self.sysstat_files])
         else:
             for mydom in self.dom.split():
                 print("scp", serverstring + "/" + self.sysstat_snippet + mydom, self.dst_dir + "/" + self.host + "/" + self.sysstat_files)
-                subprocess.call(["scp", serverstring + "/" + self.sysstat_snippet + mydom, self.dst_dir + "/" + self.host + "/" + self.sysstat-files])
+                subprocess.call(["scp", serverstring + "/" + self.sysstat_snippet + mydom, self.dst_dir + "/" + self.host + "/" + self.sysstat_files])
     
-    def prep_csv_net(self):
+    def net_prep_csv(self):
         try:
             os.makedirs(self.dst_dir + "/" + self.csv_files)
         except OSError as exception:
@@ -66,22 +72,108 @@ class hostutil(object):
                 raise
 
         if self.dom == "ALL":
-            print("ls", self.dst_dir + "/" + self.host + "/" + self.sysstat_files)
-            str_dom_tmp = subprocess.check_output(["ls", self.dst_dir + "/" + self.host + "/" + self.sysstat_files])
-            my_doms = []
-            my_doms_tmp = str_dom_tmp.splitlines()
-            for my_dom in my_doms_tmp:
-                my_doms.append(my_dom[2:].decode())
+            self.doms_explicit = [ file[-2:] for file in glob.glob(self.dst_dir + "/" + self.host + "/" + self.sysstat_files + "/sa??") ]
+            # str_dom_tmp = subprocess.check_output(["ls", self.dst_dir + "/" + self.host + "/" + self.sysstat_files + "/sa??"])
+            # my_doms = []
+            # my_doms_tmp = str_dom_tmp.splitlines()
+            # for my_dom in my_doms_tmp:
+            #     self.doms_explicit.append(my_dom[2:].decode())
         else:
-            my_doms = self.dom.split()
+            self.doms_explicit = self.dom.split()
 
-        for my_dom in my_doms:
+        net_header = "09:00:01        IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s   %ifutil".split()
+
+        # Match for English language.
+        drop_lines = re.compile("^Linux|LINUX RESTART|^$|IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s   %ifutil|^Durchschn")
+        
+        for my_dom in self.doms_explicit:
+            matrix_output = []
+            dict_nic_files = {}
+
             str_cmd = "/usr/bin/sar -n DEV -f " + self.dst_dir + "/" + self.host + "/" + self.sysstat_files + "/sa" + my_dom
+            print(str_cmd)
             cmd = shlex.split(str_cmd)
             str_sar_net = subprocess.check_output(cmd)
+            
             for myline in str_sar_net.splitlines():
-                print(myline.decode())
+                # pdb.set_trace()
+                if not drop_lines.search(myline.decode()):
+                    # print(myline.decode())
+                    # matrix_output.append(myline.decode().split())
+                    nic_name = myline.decode().split()[1]
+                    if nic_name not in dict_nic_files:
+                       dict_nic_files[nic_name] = open(self.csv_files + "/" + self.host + "-" + my_dom + "-nic-" + nic_name + ".csv", "w")
+                       # print(nic_name)
+                    dict_nic_files[nic_name].write(myline.decode() + "\n")
+            
+            self.nic_names[my_dom] = dict_nic_files.keys()
 
+            for my_file in dict_nic_files.values():
+                my_file.close()
+
+    def net_plot(self):
+        for my_dom in self.doms_explicit:
+            print("*** Day " + my_dom)
+            # A straightforward use of gnuplot.  The `debug=1' switch is used
+            # in these examples so that the commands that are sent to gnuplot
+            # are also output on stderr.
+           
+            plots_ethx_rxkb= [] 
+            plots_ethx_txkb= [] 
+            plots_vif_rxkb = []
+            plots_vif_txkb = []
+            plots_vlan_rxkb = []
+            plots_vlan_txkb = []
+
+            for my_nic in self.nic_names[my_dom]:
+                if my_nic.startswith("eth"):
+                     plots_ethx_rxkb.append(Gnuplot.File("./results/hera-" + my_dom + "-nic-" + my_nic + ".csv", using="1:5", with_="lines", title=my_nic))
+                     plots_ethx_txkb.append(Gnuplot.File("./results/hera-" + my_dom + "-nic-" + my_nic + ".csv", using="1:6", with_="lines", title=my_nic))
+                elif my_nic.startswith("vlan"):
+                    plots_vlan_rxkb.append(Gnuplot.File("./results/hera-" + my_dom + "-nic-" + my_nic + ".csv", using="1:5", with_="lines", title=my_nic))
+                    plots_vlan_txkb.append(Gnuplot.File("./results/hera-" + my_dom + "-nic-" + my_nic + ".csv", using="1:6", with_="lines", title=my_nic))
+                elif my_nic != "br0" and  my_nic != "lo" and my_nic != "ovs-system":
+                    plots_vif_rxkb.append(Gnuplot.File("./results/hera-" + my_dom + "-nic-" + my_nic + ".csv", using="1:5", with_="lines", title=my_nic))
+                    plots_vif_txkb.append(Gnuplot.File("./results/hera-" + my_dom + "-nic-" + my_nic + ".csv", using="1:6", with_="lines", title=my_nic))
+
+            # g.plot(Gnuplot.File("./results/hera-" + my_dom + "-nic-" + "eth0" + ".csv", using="1:5"),
+            #     Gnuplot.File("./results/hera-" + my_dom + "-nic-" + "eth1" + ".csv", using="1:5"))
+
+            g = Gnuplot.Gnuplot(debug=1)
+
+            g('set terminal pngcairo size 1750,875 enhanced font \'Verdana,8\'')
+            g('set output \'./diagrams/hera-' + my_dom + '-nic.png\'') 
+            # g('set style data linespoints') # give gnuplot an arbitrary command
+            g('set format x "%H:%M"')
+            g('set timefmt "%H:%M:%S"')
+            g('set xdata time')
+            g('set multiplot layout 3, 2')
+            
+
+
+            g.title('Network Received KB/s') # (optional)
+            g.plot(*plots_ethx_rxkb)
+            g.title('Network Received KB/s') # (optional)
+            g.plot(*plots_ethx_txkb)
+            g.title('Network Received KB/s') # (optional)
+            g.plot(*plots_vlan_rxkb)
+            g.title('Network Transmited KB/s') # (optional)
+            g.plot(*plots_vlan_txkb)
+            g.title('Network Transmited KB/s') # (optional)
+            g.plot(*plots_vif_rxkb)
+            g.title('Network Transmited KB/s') # (optional)
+            g.plot(*plots_vif_txkb)
+
+            g('set nomultiplot')
+        # Plot a list of (x, y) pairs (tuples or a numpy array would
+        # also be OK): 
+        # real_nics = (Gnuplot.File("./results/hera-04-nic-eth0.csv", using="1:5"),
+        #     (Gnuplot.File("./results/hera-04-nic-eth1.csv", using="1:5"))
+        # g.plot(real_nics)
+        # input('Please press return to continue...\n')
+
+
+    
 
 def initialize():
     parser = argparse.ArgumentParser()
@@ -199,7 +291,8 @@ def demo():
 # when executed, just run demo():
 if __name__ == '__main__':
     my_hostutil = initialize()
-    # my_hostutil.download_sysstat_files()
-    my_hostutil.prep_csv_net()
+    my_hostutil.download_sysstat_files()
+    my_hostutil.net_prep_csv()
+    my_hostutil.net_plot()
     # demo()
 
